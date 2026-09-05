@@ -1,0 +1,4 @@
+resources/*.json
+.claude/
+src/settings.yml
+_build/

@@ -1,0 +1,24 @@
+# TRMNLP configuration
+# {{ env.VARIABLE }} interpolation is available here
+---
+# auto-reload when files change (`watch: false` to disable)
+watch:
+  - .trmnlp.yml
+  - src
+
+# values of custom fields (defined in src/settings.yml) — safe to commit,
+# this is just fixture data for local preview, not the real plugin config.
+custom_fields:
+  title: "Canada Day"
+  target_date: "2026-07-01"
+  # Tiny 1x1 placeholder PNG so the <img> tag has something to render locally.
+  image_base64: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+
+variables:
+  trmnl:
+    system:
+      # Unix timestamp for today's date used by the dev server.
+      # Update this when testing on a different day: Jun 15 2026 12:00 UTC = 1781524800
+      timestamp_utc: 1781524800
+    user:
+      utc_offset: -14400

@@ -1,0 +1,44 @@
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+  .screen {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+</style>
+
+{% comment %}
+  Countdown math, shared by every layout — TRMNL prepends this file's
+  rendered output before each layout file at render time, so the
+  variables assigned here are available in full/half/quadrant liquid.
+
+  target_date is a recurring annual date (e.g. a birthday or holiday):
+  once the month/day has passed this year, count down to next year's
+  occurrence instead. Day boundaries are computed from the viewer's
+  local time (trmnl.user.utc_offset), not server UTC, to avoid
+  off-by-one errors near midnight.
+{% endcomment %}
+{% assign target_date_field = trmnl.plugin_settings.custom_fields_values.target_date %}
+{% assign target_month_day  = target_date_field | date: "%m-%d" %}
+
+{% assign local_ts       = trmnl.system.timestamp_utc | plus: trmnl.user.utc_offset %}
+{% assign today_date     = local_ts | date: "%Y-%m-%d" %}
+{% assign today_year     = local_ts | date: "%Y" %}
+{% assign today_ts       = today_date | date: "%s" %}
+
+{% assign target_this_year    = today_year | append: "-" | append: target_month_day %}
+{% assign target_this_year_ts = target_this_year | date: "%s" %}
+
+{% if target_this_year_ts < today_ts %}
+  {% assign next_year       = today_year | plus: 1 %}
+  {% assign target_date_str = next_year | append: "-" | append: target_month_day %}
+{% else %}
+  {% assign target_date_str = target_this_year %}
+{% endif %}
+
+{% assign target_ts     = target_date_str | date: "%s" %}
+{% assign seconds_until = target_ts | minus: today_ts %}
+{% assign days_until    = seconds_until | divided_by: 86400 %}
+
+{% assign countdown_title = trmnl.plugin_settings.custom_fields_values.title %}
+{% assign countdown_image = trmnl.plugin_settings.custom_fields_values.image_base64 %}

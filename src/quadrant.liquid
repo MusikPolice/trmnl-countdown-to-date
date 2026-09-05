@@ -1,0 +1,20 @@
+<style>
+  .countdown-wrap { width: 100%; height: 100%; }
+  .countdown-number { font-size: 64px; font-weight: 700; line-height: 1; margin: 0; }
+  .countdown-label { font-size: 16px; margin: 4px 0 0; text-align: center; }
+</style>
+
+<div class="screen">
+  <div class="view view--quadrant">
+
+    <div class="title_bar">
+      <p class="title">{{ countdown_title }}</p>
+    </div>
+
+    <div class="layout flex flex--col flex--center-x flex--center-y countdown-wrap">
+      <p class="countdown-number">{{ days_until }}</p>
+      <p class="countdown-label">day{% if days_until != 1 %}s{% endif %} until {{ countdown_title }}</p>
+    </div>
+
+  </div>
+</div>
