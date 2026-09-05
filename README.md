@@ -83,7 +83,6 @@ This started as a clone of an existing live plugin, with just enough fixed to ge
 rendering correctly again. Planned follow-ups:
 
 - Replace the manually-uploaded base64 raster image with a **generated greyscale SVG** that
-  identifies the target date, instead of requiring the user to supply their own image.
-- Upgrade from framework `2.3.7` to the current TRMNL CSS framework
-  ([3.3 docs](https://trmnl.com/framework/docs/3.3)), which adds themes and adaptive
-  icons/charts that may be useful for the SVG rework above.
+  identifies the target date, instead of requiring the user to supply their own image. The
+  current TRMNL CSS framework ([3.3 docs](https://trmnl.com/framework/docs/3.3)) adds themes
+  and adaptive icons/charts that may be useful here.

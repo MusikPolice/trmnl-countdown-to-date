@@ -75,8 +75,16 @@ viewer's local time). It still has rough edges the user plans to revisit:
 - **Image is a manually-uploaded base64 raster**, not a generated greyscale SVG identifying the
   date. The end goal is an SVG (icon/illustration) chosen or generated based on the target date,
   not a per-user PNG upload.
-- **`framework_version: 2.3.7`** — the TRMNL CSS framework is now at 3.3
-  (https://trmnl.com/framework/docs/3.3), which adds themes, adaptive charts/icons, and a
-  TRMNLPaint JS API that may be relevant to the SVG rework above.
 - No `resources/` sample data or docs folder yet, since there's no webhook payload to fixture
   beyond the custom fields already in `.trmnlp.yml`.
+
+## Framework version
+
+`framework_version` in `src/settings.yml` is pure server-side metadata — the `trmnlp` CLI
+never reads it, and local `serve`/`build` always render against
+`https://usetrmnl.com/css/latest/plugins.css` regardless of its value. It only takes effect
+once pushed. Bumped to `3.3` (https://trmnl.com/framework/docs/3.3), which is fully backward
+compatible with the classes this plugin uses (`screen`, `view`, `title_bar`, `layout`, `flex`/
+`flex--col`/`flex--row`, `flex--center-x`/`flex--center-y`, `image`) — no markup changes
+needed. 3.3 does add themes, adaptive charts/icons, and a TRMNLPaint JS API that may be
+relevant to the greyscale-SVG rework above.

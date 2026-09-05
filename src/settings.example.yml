@@ -8,7 +8,7 @@ no_screen_padding: 'yes'
 dark_mode: 'no'
 static_data: '{}'
 polling_verb: get
-framework_version: 2.3.7
+framework_version: 3.3
 polling_url: ''
 polling_headers: ''
 polling_body: ''
