@@ -5,13 +5,13 @@
       <p class="title">{{ countdown_title }}</p>
     </div>
 
-    <div class="layout layout--row p--4 gap--[16px]">
+    <div class="layout layout--col p--3 gap--[12px]">
       {% if countdown_image != blank %}
-        <img class="image image--contain image-dither countdown-image countdown-image--row-end"
+        <img class="image image--contain image-dither countdown-image"
           src="data:image/png;base64,{{ countdown_image }}"
           alt="" />
       {% endif %}
-      <p class="text--base">{{ countdown_label }}</p>
+      <p class="text--large">{{ countdown_label }}</p>
     </div>
 
   </div>

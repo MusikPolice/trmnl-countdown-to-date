@@ -19,7 +19,7 @@ and rendering uses the `static` strategy (no polling, no webhook).
 | File | Purpose |
 |---|---|
 | `src/full.liquid` | Full-screen layout (800×480) |
-| `src/half_horizontal.liquid` | 800×240 layout — image left, label right |
+| `src/half_horizontal.liquid` | 800×240 layout |
 | `src/half_vertical.liquid` | 400×480 layout |
 | `src/quadrant.liquid` | 400×240 layout — tightest margins of the four |
 | `src/shared.liquid` | CSS + the countdown date math, included before all layout files |
@@ -69,39 +69,40 @@ string assembly.
 
 ## Image layout (the countdown-image class)
 
-Every layout follows the same pattern: title bar, then a `layout` div (`layout--col` for
-full/half_vertical/quadrant, `layout--row` for half_horizontal) with equal `p--{size}` padding
-and `gap--[Npx]` between the image and the `countdown_label` line — padding and gap are always
-set to the same pixel value, per the "consistent margin everywhere" requirement. The image gets
-`image image--contain image-dither countdown-image` (`countdown-image--row-end` too, for
-half_horizontal).
+All four layouts use the same structure: title bar, then a `layout layout--col` div with equal
+`p--{size}` padding and `gap--[Npx]` between the image and the `countdown_label` line (padding
+and gap are always the same pixel value, so the margin around the border matches the gap between
+image and text). The image gets `image image--contain image-dither countdown-image`.
 
-`countdown-image` (defined in `shared.liquid`) exists because the framework's own `stretch-x`/
-`stretch-y` child utilities **do not reliably apply flex-grow along the layout's main axis** —
-verified directly: correct classes were present on the element, but `.layout:where(:not(
-.layout--row):not(.layout--col))>.stretch-y{flex:0 1 auto}` won the cascade instead of the
-expected `.layout--col>.stretch-y{flex:1 1 0%}`, despite the element being a `.layout--col`
-child (checked in `usetrmnl.com`'s shipped `plugins.css`, framework 3.3 — may be a genuine
-framework bug, not something fixable from plugin markup). `countdown-image` sets `flex:1 1 0%`
-explicitly so the image reliably grows to fill the exact leftover space after the label.
+`countdown-image` (defined in `shared.liquid`) does **not** flex-grow to fill all leftover
+space — it's sized to `width:100%; height:auto` (natural aspect ratio at full available width,
+with `flex-shrink` as a safety net against portrait images overflowing). The `layout--col`'s
+default center alignment then centers the whole image+label group as a unit within the pane.
 
-That flex-grow box can be a different aspect ratio than the image itself, and
-`image--contain` letterboxes rather than crops — by default centering the empty space evenly on
-both sides, which visibly separates the image from the label. `countdown-image` sets
-`object-position: bottom` (bottom-hugging) so any letterbox slack collects near the title bar
-instead, keeping the image flush against the label. `countdown-image--row-end` does the same for
-half_horizontal's row axis, hugging the trailing edge (right, next to the label) instead.
+This was a deliberate change from an earlier version that force-grew the image to fill 100% of
+the leftover space and then biased any letterboxing toward one edge (`object-position`). That
+approach guaranteed pixel-exact margins, but visibly dumped all the slack onto one side whenever
+the image's aspect ratio didn't need the full available space — bottom-heavy in a tall pane
+(half_vertical), or (combined with a `layout--row` for half_horizontal specifically) left the
+label sitting beside the image instead of below it. Centering the natural-sized group reads much
+better and is robust to whatever aspect ratio the real countdown image turns out to have.
+
+Side note, in case the `stretch-x`/`stretch-y` framework utilities come up again: they don't
+reliably apply flex-grow along a layout's main axis — verified directly, correct classes were
+present on the element, but `.layout:where(:not(.layout--row):not(.layout--col))>.stretch-y
+{flex:0 1 auto}` won the cascade instead of the expected `.layout--col>.stretch-y{flex:1 1 0%}`
+(checked in `usetrmnl.com`'s shipped `plugins.css`, framework 3.3 — may be a genuine framework
+bug). Not currently relevant since `countdown-image` no longer uses flex-grow at all, but worth
+remembering if a future layout wants that behavior back.
 
 **Quadrant's overflow quirk**: the framework computes each view's usable `.layout` height
 internally (based on view type + title bar presence), and at quadrant's small size (400×240)
 that computed height can run ~10px past the view's actual visible box — a rendering quirk of
-the framework itself, not something this plugin's markup controls. Because the countdown-image
-box always grows to consume exactly the leftover space, this shows up as the label clipping at
-the bottom, and the fix is counter-intuitive: **increasing** padding (not decreasing it) is what
-pulls the label back into the visible area, since the label's position is `(layout top + layout
-height) − padding-bottom` — a value that gets *larger* (moves further off-screen) as padding
-shrinks. Quadrant currently uses `p--3`/`gap--[12px]` for this reason, larger than its available
-space would otherwise call for.
+the framework itself, not something this plugin's markup controls. This mattered a lot under
+the old force-grow approach (label pinned exactly at the overflow boundary); it's a much smaller
+risk now that content is naturally sized and centered, but quadrant and half_horizontal (both
+240px tall) still use slightly larger padding (`p--3`/`gap--[12px]`) than their available space
+would otherwise call for, as a safety margin.
 
 ## Known issues / planned rework
 

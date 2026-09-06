@@ -9,32 +9,24 @@
   /*
     Framework's stretch-x/stretch-y utilities don't apply flex-grow along
     the layout's main axis reliably (verified: correct classes present,
-    but the wrong cascade rule wins for .layout--col > .stretch-y), so
-    the countdown image grows to fill leftover space explicitly instead.
-    image--contain (framework) still handles the actual aspect-ratio fit.
+    but the wrong cascade rule wins for .layout--col > .stretch-y), so the
+    countdown image is sized explicitly here instead.
+
+    The image is NOT flex-grown to fill all leftover vertical space: doing
+    so forces its box to the full available height even when the image
+    itself (after aspect-ratio-preserving contain) doesn't need that much,
+    which dumps all the slack on one side and reads as unbalanced —
+    the image and label should float together as one centered group.
+    Sizing to 100% width with auto height (flex-shrink as a safety net
+    against portrait-oriented images overflowing) achieves that: the
+    layout's default center alignment then centers the whole group.
   */
   .countdown-image {
-    flex: 1 1 0%;
+    flex: 0 1 auto;
     min-width: 0;
     min-height: 0;
     width: 100%;
-    height: 100%;
-    /*
-      When the image's aspect ratio doesn't fill its box, object-fit:contain
-      would otherwise letterbox evenly on both sides — splitting the gap
-      between image and text in a column layout. Hugging the bottom instead
-      keeps that gap exactly equal to the configured margin regardless of
-      the image's aspect ratio; any leftover space collects near the title
-      bar instead, which reads as generous margin rather than a stray gap.
-    */
-    object-position: bottom;
-  }
-
-  /* Row layouts (half_horizontal): hug the trailing edge instead, so
-     leftover space collects on the far side from the text, not between
-     the image and the text. */
-  .countdown-image--row-end {
-    object-position: right;
+    height: auto;
   }
 </style>
 

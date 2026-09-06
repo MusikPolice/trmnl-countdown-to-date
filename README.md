@@ -66,12 +66,15 @@ Credentials are stored in `~/.config/trmnlp/config.yml` (outside the repo). Both
 
 ## Layouts
 
-| Layout | Status | Description |
+All four layouts stack the image above the label, sized as large as possible and centered as a
+group within the pane.
+
+| Layout | Status | Notes |
 |---|---|---|
-| Full (800×480) | complete | Image stacked above the label, image as large as possible |
-| Half Horizontal (800×240) | complete | Image to the left of the label |
-| Half Vertical (400×480) | complete | Image stacked above the label |
-| Quadrant (400×240) | complete | Same as above, tightest margins |
+| Full (800×480) | complete | |
+| Half Horizontal (800×240) | complete | Tighter margins (240px tall) |
+| Half Vertical (400×480) | complete | |
+| Quadrant (400×240) | complete | Tighter margins (240px tall) |
 
 ## Data model
 
