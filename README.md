@@ -6,9 +6,11 @@ app — all configuration happens via plugin custom fields in the TRMNL dashboar
 
 ## What it shows
 
-The number of days remaining until `target_date` (recurring annually — once the date has
-passed this year, it counts down to next year's occurrence), a label naming what the
-countdown is for, and an image above the number.
+An image identifying the date (a greyscale line drawing you supply — see Data model below),
+sized as large as possible within a consistent margin, with a single line below it naming the
+number of days remaining until `target_date` and what it's counting down to (e.g. "16 days
+until Canada Day"). `target_date` recurs annually — once it's passed this year, the countdown
+rolls over to next year's occurrence.
 
 ## Local development
 
@@ -21,6 +23,10 @@ Requires [Docker Desktop](https://www.docker.com/products/docker-desktop/).
 
 Then open `http://localhost:4567` in a browser. The server watches `src/` and `.trmnlp.yml`
 for changes and reloads automatically.
+
+**Switch the format dropdown from "PNG" to "HTML"** — the PNG preview renders via a headless
+Firefox that doesn't display base64 `data:` URI images (this plugin's countdown image), even
+though they render correctly in a real browser and on an actual device.
 
 ### Fixture data
 
@@ -62,10 +68,10 @@ Credentials are stored in `~/.config/trmnlp/config.yml` (outside the repo). Both
 
 | Layout | Status | Description |
 |---|---|---|
-| Full (800×480) | complete | Image + big countdown number + label |
-| Half Horizontal (800×240) | complete | Image and number side-by-side |
-| Half Vertical (400×480) | complete | Image + number, stacked |
-| Quadrant (400×240) | complete | Number + label only, no image (too small to fit one) |
+| Full (800×480) | complete | Image stacked above the label, image as large as possible |
+| Half Horizontal (800×240) | complete | Image to the left of the label |
+| Half Vertical (400×480) | complete | Image stacked above the label |
+| Quadrant (400×240) | complete | Same as above, tightest margins |
 
 ## Data model
 

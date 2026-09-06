@@ -5,6 +5,37 @@
   .screen {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   }
+
+  /*
+    Framework's stretch-x/stretch-y utilities don't apply flex-grow along
+    the layout's main axis reliably (verified: correct classes present,
+    but the wrong cascade rule wins for .layout--col > .stretch-y), so
+    the countdown image grows to fill leftover space explicitly instead.
+    image--contain (framework) still handles the actual aspect-ratio fit.
+  */
+  .countdown-image {
+    flex: 1 1 0%;
+    min-width: 0;
+    min-height: 0;
+    width: 100%;
+    height: 100%;
+    /*
+      When the image's aspect ratio doesn't fill its box, object-fit:contain
+      would otherwise letterbox evenly on both sides — splitting the gap
+      between image and text in a column layout. Hugging the bottom instead
+      keeps that gap exactly equal to the configured margin regardless of
+      the image's aspect ratio; any leftover space collects near the title
+      bar instead, which reads as generous margin rather than a stray gap.
+    */
+    object-position: bottom;
+  }
+
+  /* Row layouts (half_horizontal): hug the trailing edge instead, so
+     leftover space collects on the far side from the text, not between
+     the image and the text. */
+  .countdown-image--row-end {
+    object-position: right;
+  }
 </style>
 
 {% comment %}
@@ -42,3 +73,7 @@
 
 {% assign countdown_title = trmnl.plugin_settings.custom_fields_values.title %}
 {% assign countdown_image = trmnl.plugin_settings.custom_fields_values.image_base64 %}
+
+{% assign day_word = "day" %}
+{% if days_until != 1 %}{% assign day_word = "days" %}{% endif %}
+{% assign countdown_label = days_until | append: " " | append: day_word | append: " until " | append: countdown_title %}

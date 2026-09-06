@@ -1,9 +1,3 @@
-<style>
-  .countdown-wrap { width: 100%; height: 100%; }
-  .countdown-number { font-size: 140px; font-weight: 700; line-height: 1; margin: 0; }
-  .countdown-label { font-size: 28px; margin: 8px 0 0; }
-</style>
-
 <div class="screen">
   <div class="view view--full">
 
@@ -11,16 +5,13 @@
       <p class="title">{{ countdown_title }}</p>
     </div>
 
-    <div class="layout flex flex--col flex--center-x flex--center-y countdown-wrap">
+    <div class="layout layout--col p--6 gap--[24px]">
       {% if countdown_image != blank %}
-        <img class="image"
+        <img class="image image--contain image-dither countdown-image"
           src="data:image/png;base64,{{ countdown_image }}"
-          alt=""
-          style="max-height:220px; margin-bottom:24px;" />
+          alt="" />
       {% endif %}
-
-      <p class="countdown-number">{{ days_until }}</p>
-      <p class="countdown-label">day{% if days_until != 1 %}s{% endif %} until {{ countdown_title }}</p>
+      <p class="text--large">{{ countdown_label }}</p>
     </div>
 
   </div>
