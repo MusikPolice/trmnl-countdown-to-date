@@ -20,6 +20,9 @@ Which date is showing changes every 15 minutes, deterministically round-robining
 whichever configured dates are within `days_ahead_window` days out (default 100) — every
 eligible date gets an even, non-repeating turn, unlike re-rolling a random pick each time.
 
+Most dates recur annually (a birthday, a holiday), but one-off dates (a trip, a specific race)
+are supported too — see Data model below.
+
 ## Local development
 
 Requires [Docker Desktop](https://www.docker.com/products/docker-desktop/).
@@ -47,16 +50,19 @@ wins the 15-minute rotation — see Multi-date rotation below).
 
 Don't hand-type the `Dates` field's JSON in the TRMNL dashboard. Instead:
 
-1. Copy `dates/manifest.example.json` to `dates/manifest.json` (gitignored) and list your
-   dates — `title`, `month_day` (`"MM-DD"`, zero-padded, **no year** — see below), and an
-   `image` filename.
-2. Put the matching greyscale images in `dates/images/` (gitignored — these are your personal
-   photos/art, not committed).
-3. Run `.\bin\build-dates-field.ps1`. It validates each date, base64-encodes the images, writes
-   `dates/dates.json`, and copies the result to your clipboard.
-4. Paste that into the plugin's `Dates` custom field on the TRMNL dashboard.
+1. Get a source image (a photo, or eventually the output of a planned greyscale line-art
+   generator — see Known issues).
+2. Normalize it: `.\bin\normalize-image.ps1 -InputPath <source> -OutFile dates/images/<name>.png`.
+   Resizes to fit within 600px on the long edge and converts to true grayscale, so every image
+   ends up a consistent size/format regardless of source. Reusable any time, not just for
+   migration.
+3. Copy `dates/manifest.example.json` to `dates/manifest.json` (gitignored, if it doesn't exist
+   yet) and add an entry — `title`, `date` (see Data model below), and the image filename.
+4. Run `.\bin\build-dates-field.ps1`. It validates each date, base64-encodes the (already
+   normalized) images, writes `dates/dates.json`, and copies the result to your clipboard.
+5. Paste that into the plugin's `Dates` custom field on the TRMNL dashboard.
 
-Re-run step 3 any time you add, remove, or change a date, and paste the result in again.
+Re-run steps 4-5 any time you add, remove, or change a date.
 
 ## Multi-date rotation
 
@@ -114,11 +120,13 @@ Two custom fields, defined in `src/settings.yml` and configured once in the TRMN
 
 | Field | Type | Notes |
 |---|---|---|
-| `dates` | code | JSON array of `{title, month_day, image_base64}` |
+| `dates` | code | JSON array of `{title, date, image_base64}` |
 | `days_ahead_window` | number | Only rotate through dates within this many days out. Optional, defaults to 100 |
 
-`month_day` is `"MM-DD"` with no year, since every date recurs annually — e.g. `"07-01"` for
-Canada Day, not `"2026-07-01"`.
+`date` is `"MM-DD"` (zero-padded, no year) for anything that recurs annually — e.g. `"07-01"`
+for Canada Day — or `"YYYY-MM-DD"` for a one-off that only applies once, like a specific trip or
+race (e.g. `"2026-03-07"`); one-offs are dropped automatically once they pass, rather than
+rolling forward to next year like a recurring date would.
 
 ## Known issues / roadmap
 
@@ -126,15 +134,16 @@ This started as a clone of an existing live plugin, with just enough fixed to ge
 rendering correctly again, then reworked from one-plugin-per-date into a single rotating
 instance. Planned follow-ups:
 
-- **Not yet deployed**: this instance's `dates` field hasn't been populated with real data yet,
-  and the other 9 live "Countdown to X" plugin instances haven't been migrated in or deleted —
-  that's a deliberate, separate next step once this is reviewed.
-- A **greyscale line-drawing generator** (turning a source photo into the images referenced
-  from `dates/manifest.json`) is planned as its own separate project. A future small CLI to add
-  one new date (image + generated art) to the roster in a single step is also on the table —
-  `dates/manifest.json` and `bin/build-dates-field.ps1` are kept separate for exactly this, so
-  that CLI only needs to append to the manifest and re-run the build script.
-- Replace the manually-supplied base64 raster images with **generated greyscale SVGs** per the
-  above, instead of requiring the user to supply their own image files. The current TRMNL CSS
-  framework ([3.3 docs](https://trmnl.com/framework/docs/3.3)) adds themes and adaptive
-  icons/charts that may be useful here.
+- **Migration data is ready but not deployed.** All 10 of the original "Countdown to X"
+  instances' dates/images were pulled, resized/grayscaled via `normalize-image.ps1`, and
+  verified end-to-end locally — but pasting the result into the live plugin, pushing this
+  repo's updated settings, and deleting the old instances hasn't happened yet; that's a
+  deliberate, separate step pending review.
+- A **greyscale line-drawing generator** (producing nicer images than plain resized/grayscaled
+  photos) is planned as its own separate project. A future small CLI to add one new date to the
+  roster in a single step is also on the table — `dates/manifest.json`,
+  `bin/normalize-image.ps1`, and `bin/build-dates-field.ps1` are kept as separate concerns for
+  exactly this, so that CLI only needs to call the normalize script, append to the manifest, and
+  re-run the build script.
+- The current TRMNL CSS framework ([3.3 docs](https://trmnl.com/framework/docs/3.3)) adds
+  themes and adaptive icons/charts that may be useful for the line-art generator above.

@@ -39,15 +39,21 @@
   and bin/build-dates-field.ps1 in the repo) rather than one TRMNL plugin
   instance per date. `dates` is a JSON string — a "code" custom field, parsed
   with TRMNL's parse_json filter — holding an array of
-  {title, month_day, image_base64}. month_day is "MM-DD" with no year (e.g.
-  "07-01") since every date here recurs annually — there's no year to store,
-  so this skips Liquid's `date` filter entirely for it rather than parsing a
-  placeholder year back out of a full date string. Day boundaries are
-  computed from the viewer's local time (trmnl.user.utc_offset), not server
-  UTC, to avoid off-by-one errors near midnight.
+  {title, date, image_base64}. `date` is one of:
+    - "MM-DD" (e.g. "07-01") — recurs annually, no year to store.
+    - "YYYY-MM-DD" (e.g. "2026-03-07") — a one-off (a single race, a trip),
+      valid only that year: once it's passed, Pass 1 below drops it for
+      good rather than rolling it forward like a recurring date would.
+  Distinguished by splitting on "-": 2 parts is MM-DD, 3 is YYYY-MM-DD, so
+  this skips Liquid's `date` filter entirely for the recurring case rather
+  than parsing a placeholder year back out of a full date string. Day
+  boundaries are computed from the viewer's local time
+  (trmnl.user.utc_offset), not server UTC, to avoid off-by-one errors near
+  midnight.
 
   Which date is shown:
-    1. Compute days_until for every configured date.
+    1. Compute days_until for every configured date, dropping expired
+       one-offs entirely.
     2. Keep only the ones within `days_ahead_window` days (falls back to
        showing all of them if none qualify, rather than a blank screen).
     3. Deterministically round-robin through the eligible dates in
@@ -84,51 +90,78 @@
     {% assign window_days = window_days_raw | plus: 0 %}
   {% endif %}
 
-  {% comment %} Pass 1: compute each date's recurring-annual days_until. {% endcomment %}
+  {% comment %}
+    Pass 1: compute each date's days_until (recurring-annual, or a one-off's
+    literal countdown), dropping expired one-offs. Comma-joining is
+    "prepend if not first" (via emitted_count) rather than "append if not
+    last" (via forloop.last), since a skipped expired one-off means the
+    last-emitted entry isn't always the loop's last iteration.
+  {% endcomment %}
+  {% assign emitted_count = 0 %}
   {% capture all_json %}[
   {% for d in dates %}
-    {% assign this_year_str   = today_year | append: "-" | append: d.month_day %}
-    {% assign this_year_ts    = this_year_str | date: "%s" %}
-    {% if this_year_ts < today_ts %}
-      {% assign next_year        = today_year | plus: 1 %}
-      {% assign occurrence_str   = next_year | append: "-" | append: d.month_day %}
+    {% assign date_parts = d.date | split: "-" %}
+    {% if date_parts.size == 2 %}
+      {% comment %} recurring: MM-DD {% endcomment %}
+      {% assign this_year_str = today_year | append: "-" | append: d.date %}
+      {% assign this_year_ts  = this_year_str | date: "%s" %}
+      {% if this_year_ts < today_ts %}
+        {% assign next_year      = today_year | plus: 1 %}
+        {% assign occurrence_str = next_year | append: "-" | append: d.date %}
+      {% else %}
+        {% assign occurrence_str = this_year_str %}
+      {% endif %}
+      {% assign occurrence_ts    = occurrence_str | date: "%s" %}
+      {% assign entry_days_until = occurrence_ts | minus: today_ts | divided_by: 86400 %}
     {% else %}
-      {% assign occurrence_str   = this_year_str %}
+      {% comment %} one-off: YYYY-MM-DD {% endcomment %}
+      {% assign occurrence_ts    = d.date | date: "%s" %}
+      {% assign entry_days_until = occurrence_ts | minus: today_ts | divided_by: 86400 %}
     {% endif %}
-    {% assign occurrence_ts    = occurrence_str | date: "%s" %}
-    {% assign entry_days_until = occurrence_ts | minus: today_ts | divided_by: 86400 %}
-    {"title": {{ d.title | json }}, "image_base64": {{ d.image_base64 | json }}, "days_until": {{ entry_days_until }}}{% unless forloop.last %},{% endunless %}
+
+    {% if entry_days_until >= 0 %}
+      {% unless emitted_count == 0 %},{% endunless %}
+      {"title": {{ d.title | json }}, "image_base64": {{ d.image_base64 | json }}, "days_until": {{ entry_days_until }}}
+      {% assign emitted_count = emitted_count | plus: 1 %}
+    {% endif %}
   {% endfor %}
   ]{% endcapture %}
   {% assign all_dates = all_json | parse_json %}
 
-  {% comment %} Pass 2: keep only dates within the eligibility window. {% endcomment %}
-  {% assign eligible_count = 0 %}
-  {% capture eligible_json %}[
-  {% for d in all_dates %}
-    {% if d.days_until <= window_days %}
-      {% unless eligible_count == 0 %},{% endunless %}
-      {{ d | json }}
-      {% assign eligible_count = eligible_count | plus: 1 %}
+  {% if all_dates.size == 0 %}
+    {% comment %} Everything configured was an expired one-off. {% endcomment %}
+    {% assign countdown_title = "No dates configured" %}
+    {% assign countdown_image = "" %}
+    {% assign countdown_label = "Add a date in the plugin settings" %}
+  {% else %}
+    {% comment %} Pass 2: keep only dates within the eligibility window. {% endcomment %}
+    {% assign eligible_count = 0 %}
+    {% capture eligible_json %}[
+    {% for d in all_dates %}
+      {% if d.days_until <= window_days %}
+        {% unless eligible_count == 0 %},{% endunless %}
+        {{ d | json }}
+        {% assign eligible_count = eligible_count | plus: 1 %}
+      {% endif %}
+    {% endfor %}
+    ]{% endcapture %}
+    {% assign eligible_dates = eligible_json | parse_json %}
+
+    {% if eligible_dates.size == 0 %}
+      {% assign eligible_dates = all_dates %}
     {% endif %}
-  {% endfor %}
-  ]{% endcapture %}
-  {% assign eligible_dates = eligible_json | parse_json %}
 
-  {% if eligible_dates.size == 0 %}
-    {% assign eligible_dates = all_dates %}
+    {% comment %} Rotate every 15 minutes — see refresh_interval in settings.yml. {% endcomment %}
+    {% assign bucket         = trmnl.system.timestamp_utc | divided_by: 900 %}
+    {% assign rotation_index = bucket | modulo: eligible_dates.size %}
+    {% assign selected       = eligible_dates[rotation_index] %}
+
+    {% assign countdown_title = selected.title %}
+    {% assign countdown_image = selected.image_base64 %}
+    {% assign days_until      = selected.days_until %}
+
+    {% assign day_word = "day" %}
+    {% if days_until != 1 %}{% assign day_word = "days" %}{% endif %}
+    {% assign countdown_label = days_until | append: " " | append: day_word | append: " until " | append: countdown_title %}
   {% endif %}
-
-  {% comment %} Rotate every 15 minutes — see refresh_interval in settings.yml. {% endcomment %}
-  {% assign bucket         = trmnl.system.timestamp_utc | divided_by: 900 %}
-  {% assign rotation_index = bucket | modulo: eligible_dates.size %}
-  {% assign selected       = eligible_dates[rotation_index] %}
-
-  {% assign countdown_title = selected.title %}
-  {% assign countdown_image = selected.image_base64 %}
-  {% assign days_until      = selected.days_until %}
-
-  {% assign day_word = "day" %}
-  {% if days_until != 1 %}{% assign day_word = "days" %}{% endif %}
-  {% assign countdown_label = days_until | append: " " | append: day_word | append: " until " | append: countdown_title %}
 {% endif %}

@@ -1,12 +1,17 @@
 [
   {
     "title": "Canada Day",
-    "month_day": "07-01",
+    "date": "07-01",
     "image": "canada_day.png"
   },
   {
     "title": "Christmas",
-    "month_day": "12-25",
+    "date": "12-25",
     "image": "christmas.png"
+  },
+  {
+    "title": "Vacation",
+    "date": "2026-08-14",
+    "image": "vacation.png"
   }
 ]

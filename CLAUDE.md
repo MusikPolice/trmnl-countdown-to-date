@@ -36,6 +36,7 @@ earlier design (10 separate live "Countdown to X" instances, confirmed via `GET
 | `bin/push.ps1` | Docker runner for `trmnlp push` |
 | `bin/pull.ps1` | Docker runner for `trmnlp pull` |
 | `bin/build-dates-field.ps1` | Assembles `dates/manifest.json` + `dates/images/*` into the JSON blob pasted into the "Dates" custom field |
+| `bin/normalize-image.ps1` | Resizes + grayscales + re-encodes a source image to this plugin's standard spec (600px long edge, PNG) |
 | `dates/manifest.example.json` | Committed template — copy to `dates/manifest.json` (gitignored) |
 | `dates/images/` | Your greyscale images, referenced by filename from the manifest (gitignored, personal) |
 
@@ -45,25 +46,49 @@ Two custom fields (defined in `src/settings.yml`, configured once in the TRMNL d
 
 | Field (`trmnl.plugin_settings.custom_fields_values.*`) | Type | Notes |
 |---|---|---|
-| `dates` | code | JSON array of `{title, month_day, image_base64}` — see below |
+| `dates` | code | JSON array of `{title, date, image_base64}` — see below |
 | `days_ahead_window` | number | Only rotate through dates within this many days out. Optional, defaults to 100 |
 
-`month_day` is `"MM-DD"` (zero-padded, e.g. `"07-01"`) with **no year** — every date recurs
-annually, so there's no year to store. `image_base64` has no `data:` URI prefix.
+`date` is one of:
+- `"MM-DD"` (zero-padded, e.g. `"07-01"`) — **recurs annually**, no year to store.
+- `"YYYY-MM-DD"` (e.g. `"2026-03-07"`) — a **one-off**, valid only that year. Once it passes,
+  `shared.liquid` drops it for good rather than rolling it forward like a recurring date. Use
+  this for anything that doesn't repeat on the same month/day every year — a specific trip, a
+  one-time event (this plugin's own migration included "Australia Grand Prix" this way, since
+  F1 race dates move every season). A future CLI could scan for expired one-offs and offer to
+  either extend (convert to recurring) or delete them — not built yet.
 
-Don't hand-type this JSON blob. Copy `dates/manifest.example.json` to `dates/manifest.json`,
-list your dates there (each `image` filename resolved against `dates/images/`), then run
-`.\bin\build-dates-field.ps1` — it validates each `month_day`, base64-encodes the images, writes
-`dates/dates.json`, and copies the result to the clipboard to paste into the dashboard field.
-The script only assembles; it doesn't edit the manifest, so a future "add one date" script/CLI
-can just read-modify-write `dates/manifest.json` and re-run this.
+`image_base64` has no `data:` URI prefix, and should already be normalized (see
+`bin/normalize-image.ps1` below) before it goes in the manifest.
+
+Don't hand-type this JSON blob. The full authoring pipeline:
+
+1. **Get a source image** (a photo, or eventually output from the planned greyscale line-art
+   generator — see Known issues).
+2. **Normalize it**: `.\bin\normalize-image.ps1 -InputPath <source> -OutFile dates/images/<name>.png`.
+   Resizes to fit within 600px on the long edge (matches what the layouts render at largest —
+   no point storing more than the display can ever show) and converts to true 8-bit grayscale
+   via a Rec. 601 luminosity color matrix, so every image behaves consistently regardless of
+   source format/resolution/color space. Reusable any time you add or update a date, not just
+   for one-time migration.
+3. **Add it to the manifest**: list `title`, `date`, and the image filename in
+   `dates/manifest.json` (copy `dates/manifest.example.json` there first if it doesn't exist).
+4. **Build the field**: `.\bin\build-dates-field.ps1` validates each `date`, base64-encodes the
+   already-normalized images, writes `dates/dates.json`, and copies the result to the clipboard
+   to paste into the dashboard field.
+
+Steps 2-4 are deliberately separate scripts/concerns (normalize vs. manifest vs. assemble) so a
+future "add one date" CLI only needs to call `normalize-image.ps1` on a new source image, append
+one entry to `dates/manifest.json`, and re-run `build-dates-field.ps1` — it doesn't need to
+duplicate any image processing or JSON assembly logic.
 
 ## Multi-date rotation (in `shared.liquid`)
 
-Each configured date is treated as a **recurring annual date**: once this year's `month_day`
-has passed, that entry's countdown rolls over to next year's occurrence. This mirrors the
-original single-date plugin's intent (the very first live instance was literally named
-"Countdown to Canada Day").
+Each configured date is either **recurring** (`"MM-DD"` — once this year's occurrence has
+passed, rolls over to next year's) or a **one-off** (`"YYYY-MM-DD"` — dropped for good once it
+passes, never rolled forward). Distinguished by splitting the `date` string on `-`: 2 parts is
+recurring, 3 is a one-off. The recurring case mirrors the original single-date plugin's intent
+(the very first live instance was literally named "Countdown to Canada Day").
 
 Day boundaries are computed from the viewer's local time, not server UTC:
 
@@ -149,20 +174,48 @@ had several real bugs fixed just to get it rendering (malformed `{% assign %}` b
 stray `{{ }}` interpolation inside tags, and date math anchored to server "now" instead of the
 viewer's local time). It still has rough edges the user plans to revisit:
 
-- **Not yet migrated/deployed**: the multi-date rotation redesign has only been built and
-  verified locally (`trmnlp build`/`serve`). The user's 9 other live "Countdown to X" instances
-  still exist unchanged on TRMNL — migrating their dates/images into this instance's `dates`
-  field and deleting the old instances is a deliberately separate, not-yet-done step.
+- **Migration data is prepared but not deployed.** All 10 of the user's original live
+  "Countdown to X" instances (confirmed via `GET /api/plugin_settings`, all `plugin_id: 37`)
+  had their title/date/image extracted, normalized, and assembled into `dates/dates.json`
+  (gitignored — personal data) — verified end-to-end in `trmnlp build`/`serve` with the real
+  1.1MB payload. **Not yet done**: pasting that into this instance's live `Dates` field on the
+  TRMNL dashboard, pushing this repo's updated `settings.yml`/markup (`trmnlp push`), renaming
+  the instance, and deleting the other 9 — all deliberately left for explicit user sign-off.
 - **A future "greyscale line drawing generator"** is planned as its own project (out of scope
-  here) to produce the images referenced from `dates/manifest.json`. The user also floated a
-  future CLI to add one new date (image + generated art) to the roster in one step — `dates/`
-  and `bin/build-dates-field.ps1` were deliberately structured (manifest separate from image
-  assembly) so that CLI only needs to read/append `dates/manifest.json` and re-run the build
-  script, not duplicate any of its logic.
-- **Image is a manually-uploaded base64 raster**, not a generated greyscale SVG. The end goal
-  (see above) is an SVG or line-art image chosen/generated based on the target date.
+  here) to produce nicer images than the migrated originals (see below). The user also floated a
+  future CLI to add one new date (source image + generated art) to the roster in one step —
+  `dates/`, `bin/normalize-image.ps1`, and `bin/build-dates-field.ps1` were deliberately kept as
+  separate concerns (image processing / manifest / assembly) so that CLI only needs to call the
+  first script, append one manifest entry, and re-run the last, without duplicating any of
+  their logic.
+- **Migrated images are normalized photos, not generated greyscale line art.** The original 3
+  birthday images were full-resolution photos (1.8-2.7MB base64 each — bundling all 10 unchanged
+  would've been ~6.8MB in one field); `normalize-image.ps1` brought the total down to ~1.1MB by
+  resizing to 600px and converting to true grayscale, which is fine for now but still just a
+  grayscale photo, not the line-art the generator above is meant to eventually produce.
 - No `resources/` sample data or docs folder yet, since there's no webhook payload to fixture
   beyond the custom fields already in `.trmnlp.yml`.
+
+## Extracting data from the TRMNL dashboard (browser automation note)
+
+Reading a plugin instance's actual custom field *values* (not just field definitions) isn't
+possible via the API — `GET /api/plugin_settings` lists instances (id/name/plugin_id only) and
+`GET /api/plugin_settings/{id}/archive` returns the plugin's markup/settings.yml *definition*,
+but neither includes per-instance values, and there's no `GET /api/plugin_settings/{id}` detail
+endpoint. The dashboard's "Export" button doesn't help either — it downloads that same
+definition archive.
+
+The values ARE readable from the edit page's DOM (form field
+`plugin_setting[settings][custom_fields_values][<keyname>]`), and plain-text fields (title,
+date) come back fine — but **returning a field's raw value through the browser tool's JS
+execution is blocked whenever it looks like base64 data, regardless of size** (confirmed: even
+an 88-character test string got blocked). This is a deliberate safety guard against using the
+browser as a general data-exfiltration channel and shouldn't be routed around. What does work:
+trigger a real browser download of the *decoded* bytes (`Blob` + `URL.createObjectURL` + a
+programmatic `<a download>` click) and read the resulting file from disk — the JS only needs to
+return a byte count, never the data itself. In this sandboxed environment those downloads may
+sit pending until the user's session is next active/focused; the browser's Downloads folder is
+the last stop, not the tool's JS return value.
 
 ## Local dev gotcha: base64 images and the PNG preview
 

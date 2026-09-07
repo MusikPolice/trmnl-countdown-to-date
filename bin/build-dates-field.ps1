@@ -27,8 +27,10 @@ $entries = @(
       exit 1
     }
 
-    if ($item.month_day -notmatch '^\d{2}-\d{2}$') {
-      Write-Error "'$($item.title)' has month_day '$($item.month_day)' - expected zero-padded MM-DD, e.g. '07-01'."
+    # Recurring: "MM-DD" (e.g. "07-01"). One-off: "YYYY-MM-DD" (e.g.
+    # "2026-03-07") - valid only that year, then dropped automatically.
+    if ($item.date -notmatch '^(\d{4}-)?\d{2}-\d{2}$') {
+      Write-Error "'$($item.title)' has date '$($item.date)' - expected 'MM-DD' (recurring) or 'YYYY-MM-DD' (one-off), zero-padded."
       exit 1
     }
 
@@ -36,7 +38,7 @@ $entries = @(
 
     [PSCustomObject]@{
       title        = $item.title
-      month_day    = $item.month_day
+      date         = $item.date
       image_base64 = [Convert]::ToBase64String($bytes)
     }
   }

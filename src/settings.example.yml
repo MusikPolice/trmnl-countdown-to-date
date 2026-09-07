@@ -18,10 +18,11 @@ custom_fields:
   name: Dates
   rows: 16
   description: >-
-    JSON array of dates to rotate through, each with "title", "month_day"
-    (MM-DD, zero-padded, no year - these recur annually), and "image_base64"
-    (a greyscale image, base64-encoded, no data: URI prefix). Generate this
-    with bin/build-dates-field.ps1 in the plugin's repo rather than
+    JSON array of dates to rotate through, each with "title", "date"
+    ("MM-DD" to recur annually, or "YYYY-MM-DD" for a one-off that's
+    dropped once it passes), and "image_base64" (a greyscale image,
+    base64-encoded, no data: URI prefix). Generate this with
+    bin/build-dates-field.ps1 in the plugin's repo rather than
     hand-editing.
 - keyname: days_ahead_window
   field_type: number
