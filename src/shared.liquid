@@ -31,41 +31,104 @@
 </style>
 
 {% comment %}
-  Countdown math, shared by every layout — TRMNL prepends this file's
-  rendered output before each layout file at render time, so the
-  variables assigned here are available in full/half/quadrant liquid.
+  Countdown rotation, shared by every layout — TRMNL prepends this file's
+  rendered output before each layout file at render time, so the variables
+  assigned here are available in full/half/quadrant liquid.
 
-  target_date is a recurring annual date (e.g. a birthday or holiday):
-  once the month/day has passed this year, count down to next year's
-  occurrence instead. Day boundaries are computed from the viewer's
-  local time (trmnl.user.utc_offset), not server UTC, to avoid
-  off-by-one errors near midnight.
+  This plugin holds MANY dates in one instance (see dates/manifest.example.json
+  and bin/build-dates-field.ps1 in the repo) rather than one TRMNL plugin
+  instance per date. `dates` is a JSON string — a "code" custom field, parsed
+  with TRMNL's parse_json filter — holding an array of
+  {title, month_day, image_base64}. month_day is "MM-DD" with no year (e.g.
+  "07-01") since every date here recurs annually — there's no year to store,
+  so this skips Liquid's `date` filter entirely for it rather than parsing a
+  placeholder year back out of a full date string. Day boundaries are
+  computed from the viewer's local time (trmnl.user.utc_offset), not server
+  UTC, to avoid off-by-one errors near midnight.
+
+  Which date is shown:
+    1. Compute days_until for every configured date.
+    2. Keep only the ones within `days_ahead_window` days (falls back to
+       showing all of them if none qualify, rather than a blank screen).
+    3. Deterministically round-robin through the eligible dates in
+       15-minute buckets (matches this plugin's refresh_interval in
+       settings.yml — keep the two in sync if either changes). This
+       guarantees even, non-repeating coverage across the eligible set,
+       unlike re-rolling a random `sample` on every render.
+
+  There's no where_exp filter here (checked usetrmnl.com's actual trmnl-liquid
+  gem source — only group_by/find_by/sample/parse_json/json exist), so
+  filtering by the computed days_until is a plain for/if loop rather than an
+  expression filter.
 {% endcomment %}
-{% assign target_date_field = trmnl.plugin_settings.custom_fields_values.target_date %}
-{% assign target_month_day  = target_date_field | date: "%m-%d" %}
+{% assign local_ts   = trmnl.system.timestamp_utc | plus: trmnl.user.utc_offset %}
+{% assign today_date = local_ts | date: "%Y-%m-%d" %}
+{% assign today_year = local_ts | date: "%Y" %}
+{% assign today_ts   = today_date | date: "%s" %}
 
-{% assign local_ts       = trmnl.system.timestamp_utc | plus: trmnl.user.utc_offset %}
-{% assign today_date     = local_ts | date: "%Y-%m-%d" %}
-{% assign today_year     = local_ts | date: "%Y" %}
-{% assign today_ts       = today_date | date: "%s" %}
-
-{% assign target_this_year    = today_year | append: "-" | append: target_month_day %}
-{% assign target_this_year_ts = target_this_year | date: "%s" %}
-
-{% if target_this_year_ts < today_ts %}
-  {% assign next_year       = today_year | plus: 1 %}
-  {% assign target_date_str = next_year | append: "-" | append: target_month_day %}
-{% else %}
-  {% assign target_date_str = target_this_year %}
+{% assign raw_dates = trmnl.plugin_settings.custom_fields_values.dates %}
+{% if raw_dates == blank %}
+  {% assign raw_dates = "[]" %}
 {% endif %}
+{% assign dates = raw_dates | parse_json %}
 
-{% assign target_ts     = target_date_str | date: "%s" %}
-{% assign seconds_until = target_ts | minus: today_ts %}
-{% assign days_until    = seconds_until | divided_by: 86400 %}
+{% if dates.size == 0 %}
+  {% assign countdown_title = "No dates configured" %}
+  {% assign countdown_image = "" %}
+  {% assign countdown_label = "Add a date in the plugin settings" %}
+{% else %}
+  {% assign window_days_raw = trmnl.plugin_settings.custom_fields_values.days_ahead_window %}
+  {% if window_days_raw == blank %}
+    {% assign window_days = 100 %}
+  {% else %}
+    {% assign window_days = window_days_raw | plus: 0 %}
+  {% endif %}
 
-{% assign countdown_title = trmnl.plugin_settings.custom_fields_values.title %}
-{% assign countdown_image = trmnl.plugin_settings.custom_fields_values.image_base64 %}
+  {% comment %} Pass 1: compute each date's recurring-annual days_until. {% endcomment %}
+  {% capture all_json %}[
+  {% for d in dates %}
+    {% assign this_year_str   = today_year | append: "-" | append: d.month_day %}
+    {% assign this_year_ts    = this_year_str | date: "%s" %}
+    {% if this_year_ts < today_ts %}
+      {% assign next_year        = today_year | plus: 1 %}
+      {% assign occurrence_str   = next_year | append: "-" | append: d.month_day %}
+    {% else %}
+      {% assign occurrence_str   = this_year_str %}
+    {% endif %}
+    {% assign occurrence_ts    = occurrence_str | date: "%s" %}
+    {% assign entry_days_until = occurrence_ts | minus: today_ts | divided_by: 86400 %}
+    {"title": {{ d.title | json }}, "image_base64": {{ d.image_base64 | json }}, "days_until": {{ entry_days_until }}}{% unless forloop.last %},{% endunless %}
+  {% endfor %}
+  ]{% endcapture %}
+  {% assign all_dates = all_json | parse_json %}
 
-{% assign day_word = "day" %}
-{% if days_until != 1 %}{% assign day_word = "days" %}{% endif %}
-{% assign countdown_label = days_until | append: " " | append: day_word | append: " until " | append: countdown_title %}
+  {% comment %} Pass 2: keep only dates within the eligibility window. {% endcomment %}
+  {% assign eligible_count = 0 %}
+  {% capture eligible_json %}[
+  {% for d in all_dates %}
+    {% if d.days_until <= window_days %}
+      {% unless eligible_count == 0 %},{% endunless %}
+      {{ d | json }}
+      {% assign eligible_count = eligible_count | plus: 1 %}
+    {% endif %}
+  {% endfor %}
+  ]{% endcapture %}
+  {% assign eligible_dates = eligible_json | parse_json %}
+
+  {% if eligible_dates.size == 0 %}
+    {% assign eligible_dates = all_dates %}
+  {% endif %}
+
+  {% comment %} Rotate every 15 minutes — see refresh_interval in settings.yml. {% endcomment %}
+  {% assign bucket         = trmnl.system.timestamp_utc | divided_by: 900 %}
+  {% assign rotation_index = bucket | modulo: eligible_dates.size %}
+  {% assign selected       = eligible_dates[rotation_index] %}
+
+  {% assign countdown_title = selected.title %}
+  {% assign countdown_image = selected.image_base64 %}
+  {% assign days_until      = selected.days_until %}
+
+  {% assign day_word = "day" %}
+  {% if days_until != 1 %}{% assign day_word = "days" %}{% endif %}
+  {% assign countdown_label = days_until | append: " " | append: day_word | append: " until " | append: countdown_title %}
+{% endif %}

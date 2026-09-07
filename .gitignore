@@ -2,3 +2,7 @@ resources/*.json
 .claude/
 src/settings.yml
 _build/
+dates/manifest.json
+dates/dates.json
+dates/images/*
+!dates/images/.gitkeep

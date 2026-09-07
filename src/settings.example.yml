@@ -13,19 +13,23 @@ polling_url: ''
 polling_headers: ''
 polling_body: ''
 custom_fields:
-- keyname: title
-  field_type: string
-  name: Title
-  description: The name of the date that you're counting down to
-- keyname: target_date
-  field_type: date
-  name: Target Date
-  default: '2025-12-25'
-  description: The date that you're counting down to
-- keyname: image_base64
-  field_type: text
-  name: Base64 Encoded Image
-  description: The image to show above the number of days remaining until the date that you're counting down to
+- keyname: dates
+  field_type: code
+  name: Dates
+  rows: 16
+  description: >-
+    JSON array of dates to rotate through, each with "title", "month_day"
+    (MM-DD, zero-padded, no year - these recur annually), and "image_base64"
+    (a greyscale image, base64-encoded, no data: URI prefix). Generate this
+    with bin/build-dates-field.ps1 in the plugin's repo rather than
+    hand-editing.
+- keyname: days_ahead_window
+  field_type: number
+  name: Eligibility Window (days)
+  optional: true
+  default: '100'
+  min: '1'
+  description: Only rotate through dates that are within this many days away. Leave blank for 100.
 name: Countdown to Date
 description:
-refresh_interval: 1440
+refresh_interval: 15

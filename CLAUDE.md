@@ -2,10 +2,16 @@
 
 ## Project
 
-TRMNL private plugin that shows a countdown (in days) to a user-configured date, alongside
-an image identifying that date. Unlike the iOS Reminders/Calendars plugins, this one has no
-companion app — all input comes from plugin custom fields configured in the TRMNL dashboard,
-and rendering uses the `static` strategy (no polling, no webhook).
+TRMNL private plugin that shows a countdown (in days) to a date, alongside an image
+identifying that date. Unlike the iOS Reminders/Calendars plugins, this one has no companion
+app — all input comes from plugin custom fields configured in the TRMNL dashboard, and
+rendering uses the `static` strategy (no polling, no webhook).
+
+One plugin **instance holds many dates** (Canada Day, Christmas, every family birthday, etc.)
+and rotates through them, rather than one TRMNL plugin instance per date. This replaced an
+earlier design (10 separate live "Countdown to X" instances, confirmed via `GET
+/api/plugin_settings` — all sharing `plugin_id: 37`) that was annoying to manage. See
+"Multi-date rotation" below.
 
 ## Tech stack
 
@@ -29,23 +35,35 @@ and rendering uses the `static` strategy (no polling, no webhook).
 | `bin/serve.ps1` | Docker runner for `trmnlp serve` |
 | `bin/push.ps1` | Docker runner for `trmnlp push` |
 | `bin/pull.ps1` | Docker runner for `trmnlp pull` |
+| `bin/build-dates-field.ps1` | Assembles `dates/manifest.json` + `dates/images/*` into the JSON blob pasted into the "Dates" custom field |
+| `dates/manifest.example.json` | Committed template — copy to `dates/manifest.json` (gitignored) |
+| `dates/images/` | Your greyscale images, referenced by filename from the manifest (gitignored, personal) |
 
 ## Data model
 
-This plugin has three custom fields (defined in `src/settings.yml`, configured per-user in the
-TRMNL dashboard):
+Two custom fields (defined in `src/settings.yml`, configured once in the TRMNL dashboard):
 
 | Field (`trmnl.plugin_settings.custom_fields_values.*`) | Type | Notes |
 |---|---|---|
-| `title` | string | Name of the thing being counted down to, e.g. "Canada Day" |
-| `target_date` | date | `YYYY-MM-DD`. Recurs annually — see below |
-| `image_base64` | text | Base64-encoded image shown above the countdown number |
+| `dates` | code | JSON array of `{title, month_day, image_base64}` — see below |
+| `days_ahead_window` | number | Only rotate through dates within this many days out. Optional, defaults to 100 |
 
-## Countdown logic (in `shared.liquid`)
+`month_day` is `"MM-DD"` (zero-padded, e.g. `"07-01"`) with **no year** — every date recurs
+annually, so there's no year to store. `image_base64` has no `data:` URI prefix.
 
-`target_date` is treated as a **recurring annual date**: once this year's month/day has passed,
-the countdown rolls over to next year's occurrence. This mirrors the original plugin's intent
-(the live plugin is literally named "Countdown to Canada Day").
+Don't hand-type this JSON blob. Copy `dates/manifest.example.json` to `dates/manifest.json`,
+list your dates there (each `image` filename resolved against `dates/images/`), then run
+`.\bin\build-dates-field.ps1` — it validates each `month_day`, base64-encodes the images, writes
+`dates/dates.json`, and copies the result to the clipboard to paste into the dashboard field.
+The script only assembles; it doesn't edit the manifest, so a future "add one date" script/CLI
+can just read-modify-write `dates/manifest.json` and re-run this.
+
+## Multi-date rotation (in `shared.liquid`)
+
+Each configured date is treated as a **recurring annual date**: once this year's `month_day`
+has passed, that entry's countdown rolls over to next year's occurrence. This mirrors the
+original single-date plugin's intent (the very first live instance was literally named
+"Countdown to Canada Day").
 
 Day boundaries are computed from the viewer's local time, not server UTC:
 
@@ -56,10 +74,30 @@ Day boundaries are computed from the viewer's local time, not server UTC:
 Never use `trmnl.system.timestamp_utc | date: ...` directly — see the iOS Reminders/Calendars
 plugins for why (off-by-one day errors for negative UTC offsets).
 
+Which of the configured dates is actually shown, computed fresh on every render:
+
+1. **Compute `days_until`** for every entry in `dates` (the recurring-annual math above,
+   looped). Liquid can't mutate a field onto an existing hash in place, so this goes through a
+   `capture` → build a JSON string per entry (each field piped through the `json` filter to stay
+   properly escaped) → `parse_json` it back into a real array of hashes that now include
+   `days_until`. This round-trip pattern repeats for the next step too.
+2. **Filter to `days_ahead_window`**: keep only entries with `days_until <= window`. There is
+   **no `where_exp` filter** here — checked `usetrmnl.com`'s actual `trmnl-liquid` gem source
+   (bundled identically into `trmnlp` for local dev), and only `group_by`/`find_by`/`sample`/
+   `parse_json`/`json` exist — so this is a plain `for`/`if` loop, not an expression filter. If
+   nothing qualifies (e.g. right after New Year, everything might be >100 days out), falls back
+   to showing all configured dates rather than a blank screen.
+3. **Rotate deterministically**: `bucket = timestamp_utc / 900` (15-minute buckets, matching
+   this plugin's `refresh_interval: 15` — keep the two in sync if either changes), `index =
+   bucket mod eligible.size`, select `eligible[index]`. This guarantees even, non-repeating
+   coverage of the eligible set — a random `sample` re-rolled every render could show the same
+   date twice running and take a while to cover everyone else (the coupon-collector problem).
+
 `shared.liquid` assigns `days_until`, `countdown_title`, `countdown_image`, and the fully
 composed `countdown_label` (e.g. "16 days until Canada Day", with correct day/days
-pluralization) — every layout file just displays these, it does not repeat the date math or
-string assembly.
+pluralization) from whichever entry won the rotation — every layout file just displays these,
+it does not repeat the date math, filtering, or string assembly. If `dates` is empty entirely,
+these fall back to a friendly placeholder ("No dates configured") rather than erroring.
 
 ## Display constraints
 
@@ -111,9 +149,18 @@ had several real bugs fixed just to get it rendering (malformed `{% assign %}` b
 stray `{{ }}` interpolation inside tags, and date math anchored to server "now" instead of the
 viewer's local time). It still has rough edges the user plans to revisit:
 
-- **Image is a manually-uploaded base64 raster**, not a generated greyscale SVG identifying the
-  date. The end goal is an SVG (icon/illustration) chosen or generated based on the target date,
-  not a per-user PNG upload.
+- **Not yet migrated/deployed**: the multi-date rotation redesign has only been built and
+  verified locally (`trmnlp build`/`serve`). The user's 9 other live "Countdown to X" instances
+  still exist unchanged on TRMNL — migrating their dates/images into this instance's `dates`
+  field and deleting the old instances is a deliberately separate, not-yet-done step.
+- **A future "greyscale line drawing generator"** is planned as its own project (out of scope
+  here) to produce the images referenced from `dates/manifest.json`. The user also floated a
+  future CLI to add one new date (image + generated art) to the roster in one step — `dates/`
+  and `bin/build-dates-field.ps1` were deliberately structured (manifest separate from image
+  assembly) so that CLI only needs to read/append `dates/manifest.json` and re-run the build
+  script, not duplicate any of its logic.
+- **Image is a manually-uploaded base64 raster**, not a generated greyscale SVG. The end goal
+  (see above) is an SVG or line-art image chosen/generated based on the target date.
 - No `resources/` sample data or docs folder yet, since there's no webhook payload to fixture
   beyond the custom fields already in `.trmnlp.yml`.
 
