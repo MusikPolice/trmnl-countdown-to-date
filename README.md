@@ -53,8 +53,8 @@ Don't hand-type the `Dates` field's JSON in the TRMNL dashboard. Instead:
 1. Get a source image (a photo, or eventually the output of a planned greyscale line-art
    generator — see Known issues).
 2. Normalize it: `.\bin\normalize-image.ps1 -InputPath <source> -OutFile dates/images/<name>.png`.
-   Resizes to fit within 600px on the long edge and converts to true grayscale, so every image
-   ends up a consistent size/format regardless of source. Reusable any time, not just for
+   Caps width at 600px (downscaling only) and converts to a true 8-bit grayscale PNG, so every
+   image ends up a consistent size/format regardless of source. Reusable any time, not just for
    migration.
 3. Copy `dates/manifest.example.json` to `dates/manifest.json` (gitignored, if it doesn't exist
    yet) and add an entry — `title`, `date` (see Data model below), and the image filename.

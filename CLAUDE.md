@@ -36,7 +36,7 @@ earlier design (10 separate live "Countdown to X" instances, confirmed via `GET
 | `bin/push.ps1` | Docker runner for `trmnlp push` |
 | `bin/pull.ps1` | Docker runner for `trmnlp pull` |
 | `bin/build-dates-field.ps1` | Assembles `dates/manifest.json` + `dates/images/*` into the JSON blob pasted into the "Dates" custom field |
-| `bin/normalize-image.ps1` | Resizes + grayscales + re-encodes a source image to this plugin's standard spec (600px long edge, PNG) |
+| `bin/normalize-image.ps1` | Resizes + grayscales + re-encodes a source image to this plugin's standard spec (600px width cap, indexed 8-bit grayscale PNG) |
 | `dates/manifest.example.json` | Committed template — copy to `dates/manifest.json` (gitignored) |
 | `dates/images/` | Your greyscale images, referenced by filename from the manifest (gitignored, personal) |
 
@@ -66,11 +66,14 @@ Don't hand-type this JSON blob. The full authoring pipeline:
 1. **Get a source image** (a photo, or eventually output from the planned greyscale line-art
    generator — see Known issues).
 2. **Normalize it**: `.\bin\normalize-image.ps1 -InputPath <source> -OutFile dates/images/<name>.png`.
-   Resizes to fit within 600px on the long edge (matches what the layouts render at largest —
-   no point storing more than the display can ever show) and converts to true 8-bit grayscale
-   via a Rec. 601 luminosity color matrix, so every image behaves consistently regardless of
-   source format/resolution/color space. Reusable any time you add or update a date, not just
-   for one-time migration.
+   Caps width at 600px, downscaling only (never upscaling a narrower source) — `countdown-image`
+   is `width:100%; height:auto` (see Image layout below), so width is the only axis any layout
+   ever actually constrains, no matter the image's aspect ratio. Also flattens any transparency
+   onto white (the screen background) and converts to a true 8-bit indexed grayscale PNG (not
+   GDI+'s default RGBA, which stores 4x the bytes for pixels that are visually gray anyway) via
+   a Rec. 601 luminosity color matrix, so every image behaves consistently regardless of source
+   format/resolution/color space. Reusable any time you add or update a date, not just for
+   one-time migration.
 3. **Add it to the manifest**: list `title`, `date`, and the image filename in
    `dates/manifest.json` (copy `dates/manifest.example.json` there first if it doesn't exist).
 4. **Build the field**: `.\bin\build-dates-field.ps1` validates each `date`, base64-encodes the
@@ -178,7 +181,7 @@ viewer's local time). It still has rough edges the user plans to revisit:
   "Countdown to X" instances (confirmed via `GET /api/plugin_settings`, all `plugin_id: 37`)
   had their title/date/image extracted, normalized, and assembled into `dates/dates.json`
   (gitignored — personal data) — verified end-to-end in `trmnlp build`/`serve` with the real
-  1.1MB payload. **Not yet done**: pasting that into this instance's live `Dates` field on the
+  ~700KB payload. **Not yet done**: pasting that into this instance's live `Dates` field on the
   TRMNL dashboard, pushing this repo's updated `settings.yml`/markup (`trmnlp push`), renaming
   the instance, and deleting the other 9 — all deliberately left for explicit user sign-off.
 - **A future "greyscale line drawing generator"** is planned as its own project (out of scope
@@ -188,11 +191,16 @@ viewer's local time). It still has rough edges the user plans to revisit:
   separate concerns (image processing / manifest / assembly) so that CLI only needs to call the
   first script, append one manifest entry, and re-run the last, without duplicating any of
   their logic.
-- **Migrated images are normalized photos, not generated greyscale line art.** The original 3
-  birthday images were full-resolution photos (1.8-2.7MB base64 each — bundling all 10 unchanged
-  would've been ~6.8MB in one field); `normalize-image.ps1` brought the total down to ~1.1MB by
-  resizing to 600px and converting to true grayscale, which is fine for now but still just a
-  grayscale photo, not the line-art the generator above is meant to eventually produce.
+- **`normalize-image.ps1` originally produced grayscale-by-value pixels stored in a full RGBA
+  PNG** (GDI+'s default encoder output for a 32bpp source, regardless of the actual color
+  values), which meant every "grayscale" image was still paying for 4 bytes/pixel. It now
+  flattens onto white and repacks into a true 8-bit indexed grayscale PNG, and caps width only
+  (not the long edge — `countdown-image` is `width:100%; height:auto`, so width is the only axis
+  any layout ever constrains). Re-running it over the 10 migrated images dropped `dates/dates.json`
+  from ~1.1MB to ~700KB with no visible quality loss. Two of the ten (`canada_day.png`,
+  `victoria_day.png`) are still only 256x256 — smaller than the 600px cap — because upscaling them
+  from their current size would just blur them further; the user plans to replace those two
+  source images later rather than upscale in place.
 - No `resources/` sample data or docs folder yet, since there's no webhook payload to fixture
   beyond the custom fields already in `.trmnlp.yml`.
 
