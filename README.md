@@ -134,11 +134,8 @@ This started as a clone of an existing live plugin, with just enough fixed to ge
 rendering correctly again, then reworked from one-plugin-per-date into a single rotating
 instance. Planned follow-ups:
 
-- **Migration data is ready but not deployed.** All 10 of the original "Countdown to X"
-  instances' dates/images were pulled, resized/grayscaled via `normalize-image.ps1`, and
-  verified end-to-end locally — but pasting the result into the live plugin, pushing this
-  repo's updated settings, and deleting the old instances hasn't happened yet; that's a
-  deliberate, separate step pending review.
+- **Migration is done.** All 10 of the original "Countdown to X" instances have been
+  consolidated into this single rotating instance and deleted.
 - A **greyscale line-drawing generator** (producing nicer images than plain resized/grayscaled
   photos) is planned as its own separate project. A future small CLI to add one new date to the
   roster in a single step is also on the table — `dates/manifest.json`,

@@ -177,13 +177,15 @@ had several real bugs fixed just to get it rendering (malformed `{% assign %}` b
 stray `{{ }}` interpolation inside tags, and date math anchored to server "now" instead of the
 viewer's local time). It still has rough edges the user plans to revisit:
 
-- **Migration data is prepared but not deployed.** All 10 of the user's original live
-  "Countdown to X" instances (confirmed via `GET /api/plugin_settings`, all `plugin_id: 37`)
-  had their title/date/image extracted, normalized, and assembled into `dates/dates.json`
-  (gitignored — personal data) — verified end-to-end in `trmnlp build`/`serve` with the real
-  ~700KB payload. **Not yet done**: pasting that into this instance's live `Dates` field on the
-  TRMNL dashboard, pushing this repo's updated `settings.yml`/markup (`trmnlp push`), renaming
-  the instance, and deleting the other 9 — all deliberately left for explicit user sign-off.
+- **Migration is deployed.** All 10 of the user's original live "Countdown to X" instances
+  (all `plugin_id: 37`) had their title/date/image extracted, normalized, and assembled into
+  `dates/dates.json` (gitignored — personal data), which is now live: `trmnlp push` updated
+  instance `244316`'s markup/settings and renamed it from "Countdown to Canada Day" to
+  "Countdown to Date" (its `settings.yml` name), the built `dates.json` was pasted into its
+  `Dates` field via the dashboard (no API exists to write custom field values — see the
+  extraction note below for why), and the other 9 legacy instances were deleted via the
+  dashboard's per-instance "Remove plugin" control. Confirmed via `GET /api/plugin_settings`:
+  exactly one `plugin_id: 37` instance remains (`244316`, "Countdown to Date").
 - **A future "greyscale line drawing generator"** is planned as its own project (out of scope
   here) to produce nicer images than the migrated originals (see below). The user also floated a
   future CLI to add one new date (source image + generated art) to the roster in one step —
